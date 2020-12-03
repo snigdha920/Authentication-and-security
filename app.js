@@ -3,7 +3,7 @@ const express = require("express");
 const bodyparser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-
+const encrypt = require("mongoose-encryption");
 const app = express();
 
 app.use(express.static("public"));
@@ -11,12 +11,17 @@ app.set("view engine", "ejs");
 app.use(bodyparser.urlencoded({ extended: true }));
 
 // Connect with monogdb
-mongoose.connect("mongodb://localhost:27017/userDB", { useUnifiedTopology: true,  useNewUrlParser: true});
+mongoose.connect("mongodb://localhost:27017/userDB", {
+  useUnifiedTopology: true,
+  useNewUrlParser: true,
+});
 
-const userSchema = {
+const userSchema = new mongoose.Schema({
   email: String,
   password: String
-};
+});
+const secret = "thisismysecret";
+userSchema.plugin(encrypt, {secret: secret, encryptedFields: ['password']});
 
 const User = new mongoose.model("User", userSchema);
 
@@ -32,10 +37,10 @@ app.get("/register", (req, res) => {
 app.post("/register", (req, res) => {
   const newUser = new User({
     email: req.body.username,
-    password: req.body.password
+    password: req.body.password,
   });
   newUser.save((err) => {
-    if(err) {
+    if (err) {
       console.log(err);
     } else {
       res.render("secrets");
@@ -45,18 +50,23 @@ app.post("/register", (req, res) => {
 app.post("/login", (req, res) => {
   const email = req.body.username;
   const password = req.body.password;
-
-  User.findOne({email: email, password: password}, (err, foundUser) => {
-    if(err) {
+  
+  User.findOne({ email: email }, (err, foundUser) => {
+    if (err) {
       console.log(err);
-    } else {
-      if(foundUser) {
-        if(foundUser.password === password) {
+    } 
+    else {
+      if (foundUser !== null) {
+        if (foundUser.password === password) {
           res.render("secrets");
-        } else {
-          console.log("Incorrect username or password");
         } 
-      } 
+        else {
+          console.log("Incorrect password");
+        }
+      }
+      else {
+        console.log("User not found");
+      }
     }
   });
 });
