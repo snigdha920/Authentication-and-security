@@ -1,11 +1,12 @@
 //jshint esversion:6
-require('dotenv').config();
+require("dotenv").config();
+const alert = require("alert");
 const express = require("express");
 const bodyparser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
-const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 
@@ -21,7 +22,7 @@ mongoose.connect("mongodb://localhost:27017/userDB", {
 
 const userSchema = new mongoose.Schema({
   email: String,
-  password: String
+  password: String,
 });
 
 const User = new mongoose.model("User", userSchema);
@@ -29,16 +30,24 @@ const User = new mongoose.model("User", userSchema);
 app.get("/", (req, res) => {
   res.render("home");
 });
+
 app.get("/login", (req, res) => {
   res.render("login");
 });
+
 app.get("/register", (req, res) => {
   res.render("register");
 });
+
+app.get("/logout", (req, res) => {
+  res.render("home");
+})
+
 app.post("/register", (req, res) => {
+  const salt = bcrypt.genSaltSync(saltRounds);
   const newUser = new User({
     email: req.body.username,
-    password: md5(req.body.password),
+    password: bcrypt.hashSync(req.body.password, salt),
   });
   newUser.save((err) => {
     if (err) {
@@ -48,25 +57,23 @@ app.post("/register", (req, res) => {
     }
   });
 });
+
 app.post("/login", (req, res) => {
   const email = req.body.username;
   const password = req.body.password;
-  
+
   User.findOne({ email: email }, (err, foundUser) => {
     if (err) {
       console.log(err);
-    } 
-    else {
+    } else {
       if (foundUser !== null) {
-        let enteredPassword = md5(password);
-        if (foundUser.password === enteredPassword) {
+        if (bcrypt.compareSync(password, foundUser.password)) {
           res.render("secrets");
-        } 
-        else {
-          console.log("Incorrect password");
+        } else {
+          alert("Incorrect password");
+          res.render("login");
         }
-      }
-      else {
+      } else {
         console.log("User not found");
       }
     }
