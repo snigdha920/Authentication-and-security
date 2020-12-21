@@ -7,7 +7,10 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
-const flash = require('connect-flash');
+const flash = require("connect-flash");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const FacebookStrategy = require("passport-facebook").Strategy;
+const findOrCreate = require("mongoose-findorcreate");
 
 const app = express();
 
@@ -37,9 +40,13 @@ mongoose.set("useCreateIndex", true);
 const userSchema = new mongoose.Schema({
   email: String,
   password: String,
+  googleId: String,
+  facebookId: String
 });
 
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate);
+
 const User = new mongoose.model("User", userSchema);
 
 passport.use(User.createStrategy());
@@ -50,6 +57,38 @@ passport.serializeUser((user, done) => {
 passport.deserializeUser((user, done) => {
   return done(null, user);
 });
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      callbackURL: "http://localhost:3000/auth/google/secrets",
+      userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
+    },
+    function (accessToken, refreshToken, profile, cb) {
+      console.log(profile);
+      User.findOrCreate({ googleId: profile.id }, function (err, user) {
+        return cb(err, user);
+      });
+    }
+  )
+);
+
+passport.use(
+  new FacebookStrategy(
+    {
+      clientID: process.env.FACEBOOK_APP_ID,
+      clientSecret: process.env.FACEBOOK_APP_SECRET,
+      callbackURL: "http://localhost:3000/auth/facebook/secrets",
+    },
+    function (accessToken, refreshToken, profile, cb) {
+      User.findOrCreate({ facebookId: profile.id }, function (err, user) {
+        return cb(err, user);
+      });
+    }
+  )
+);
 
 app.get("/", (req, res) => {
   res.render("home");
@@ -87,39 +126,52 @@ app.post("/register", (req, res) => {
       } else {
         passport.authenticate("local")(req, res, () => {
           res.redirect("/secrets");
-          // passport.authenticate() middleware invokes req.login() automatically.
-          // This function is primarily used when users sign up, during which req.login() can be invoked to automatically log in the newly registered user.
         });
       }
     }
   );
 });
 
-// Method 1 to log in
-// app.post(
-//   "/login",
-//   passport.authenticate("local", {
-//     successRedirect: "/secrets",
-//     failureRedirect: "/login"
-//   })
-// );
-
-// Method 2
 app.post("/login", (req, res) => {
   const user = new User({
     email: req.body.username,
-    password: req.body.password
+    password: req.body.password,
   });
 
   req.login(user, (err) => {
-    if(err) {
+    if (err) {
       console.log(err);
     } else {
-      passport.authenticate('local')(req, res, () => {
+      passport.authenticate("local")(req, res, () => {
         res.redirect("/secrets");
       });
     }
   });
 });
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile"] })
+);
+
+app.get(
+  "/auth/google/secrets",
+  passport.authenticate("google", { failureRedirect: "/login" }),
+  function (req, res) {
+    // Successful authentication, redirect to Secrets.
+    res.redirect("/secrets");
+  }
+);
+
+app.get("/auth/facebook", passport.authenticate("facebook"));
+
+app.get(
+  "/auth/facebook/secrets",
+  passport.authenticate("facebook", { failureRedirect: "/login" }),
+  function (req, res) {
+    // Successful authentication, redirect home.
+    res.redirect("/secrets");
+  }
+);
 
 app.listen(3000, () => console.log("Server is up and running on port 3000."));
