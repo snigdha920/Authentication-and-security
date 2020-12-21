@@ -11,6 +11,7 @@ const flash = require("connect-flash");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const FacebookStrategy = require("passport-facebook").Strategy;
 const findOrCreate = require("mongoose-findorcreate");
+const e = require("express");
 
 const app = express();
 
@@ -41,7 +42,8 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   googleId: String,
-  facebookId: String
+  facebookId: String,
+  secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -108,11 +110,12 @@ app.get("/logout", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.render("secrets");
-  } else {
-    res.redirect("/login");
-  }
+  User.find({secret: {$ne: null}}, (err, foundUsers) => {
+    if(err) console.log(err);
+    else {
+      res.render("secrets", {usersWithSecrets: foundUsers});
+    }
+  })
 });
 
 app.post("/register", (req, res) => {
@@ -173,5 +176,28 @@ app.get(
     res.redirect("/secrets");
   }
 );
+
+app.get("/submit", (req, res) => {
+  if(req.isAuthenticated()) {
+    res.render("submit");
+  } else {
+    res.redirect("/login");
+  }
+});
+
+app.post("/submit", (req, res) => {
+  const submittedSecret = req.body.secret;
+  console.log(req.user._id);
+  User.findById(req.user._id, (err, foundUser) => {
+    if(err) {
+      console.log(err);
+    } else {
+      foundUser.secret = submittedSecret;
+      foundUser.save(() => {
+        res.redirect("/secrets");
+      });
+    }
+  });
+});
 
 app.listen(3000, () => console.log("Server is up and running on port 3000."));
